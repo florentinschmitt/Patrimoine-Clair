@@ -4,8 +4,6 @@ Votre patrimoine en un coup d'œil. Aucune connexion bancaire.
 
 Suivez votre patrimoine en un coup d'œil, **sans connecter vos comptes bancaires**.
 
-👉 **[Ouvrir l'outil](https://TON-PSEUDO.github.io/patrimoine-clair/)**
-
 ## Pourquoi cet outil
 
 - **Aucune connexion bancaire.** Vous saisissez vos lignes vous-même.
