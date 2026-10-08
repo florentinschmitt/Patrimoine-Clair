@@ -1,4 +1,7 @@
 {
-  "updated": null,
-  "prices": {}
+  "updated": "08/10/2026",
+  "prices": {
+    "TTE": 77.58,
+    "WPEA": 7.18
+  }
 }
