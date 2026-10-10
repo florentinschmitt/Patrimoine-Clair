@@ -63,7 +63,19 @@ input[type=search]{flex:1 1 180px}
 </style>
 </head>
 <body>
-<main>
+<div id="lock" hidden style="max-width:420px;margin:12vh auto;padding:0 16px">
+  <section>
+    <h2>Données protégées</h2>
+    <p class="note" style="margin:0 0 10px">Saisissez votre mot de passe pour déchiffrer vos données. Il n'existe aucun moyen de le récupérer.</p>
+    <div class="row">
+      <input id="lpw" type="password" autocomplete="current-password" placeholder="Mot de passe" aria-label="Mot de passe" style="flex:1 1 200px">
+      <button class="main" id="lgo" type="button">Déverrouiller</button>
+    </div>
+    <p class="note neg" id="lmsg" role="alert"></p>
+    <button id="lreset" type="button" class="x">Mot de passe perdu ? Effacer les données</button>
+  </section>
+</div>
+<main hidden>
   <div class="row" style="justify-content:flex-end;margin-bottom:8px">
     <button id="eye" type="button" aria-pressed="false">👁 Masquer</button>
     <button id="theme" type="button" aria-label="Basculer clair / sombre">◐ Thème</button>
@@ -116,11 +128,24 @@ input[type=search]{flex:1 1 180px}
   </section>
 
   <section>
+    <h2>Protection des données</h2>
+    <p class="note" id="pwState" style="margin:0 0 10px"></p>
+    <div class="row">
+      <input id="pw1" type="password" autocomplete="new-password" placeholder="Mot de passe (8 caractères min.)" aria-label="Nouveau mot de passe">
+      <input id="pw2" type="password" autocomplete="new-password" placeholder="Confirmer" aria-label="Confirmer le mot de passe">
+      <button class="main" id="pwBtn" type="button">Chiffrer mes données</button>
+    </div>
+    <p class="note" id="pwMsg" role="status">Mot de passe perdu = données perdues : gardez toujours un export.</p>
+  </section>
+
+  <section>
     <h2>Sauvegarde</h2>
     <div class="row">
-      <button id="export" type="button">Exporter mes données</button>
+      <input id="encPwd" type="password" autocomplete="off" placeholder="Mot de passe du fichier chiffré" aria-label="Mot de passe du fichier chiffré">
+      <button id="export" type="button">Exporter (JSON)</button>
+      <button id="exportEnc" type="button">Exporter chiffré (.enc)</button>
       <button id="importBtn" type="button">Importer un fichier</button>
-      <input id="importFile" type="file" accept="application/json" hidden>
+      <input id="importFile" type="file" accept=".json,.enc,application/json,text/plain" hidden>
       <button id="pasteBtn" type="button">Importer un texte</button>
     </div>
     <textarea id="bkBox" hidden rows="6" spellcheck="false" aria-label="Données exportées ou à importer" style="width:100%;margin-top:10px;font:12px/1.4 ui-monospace,monospace;background:transparent;color:inherit;border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>
@@ -155,7 +180,7 @@ let items = [], pricesDate = null, autoCount = 0;
 
 function el(t,p={},...k){const e=document.createElement(t);for(const a in p){if(a==="class")e.className=p[a];else if(a.startsWith("on"))e.addEventListener(a.slice(2),p[a]);else e.setAttribute(a,p[a])}k.flat().forEach(c=>e.append(c));return e}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));items=Array.isArray(d)?d:[]}catch(e){items=[]}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(items))}catch(e){}}
+function save(){persist()}
 const color = i => getComputedStyle(document.documentElement).getPropertyValue(COLORS[i%COLORS.length]);
 
 const ENVS=["PEA","PEA-PME","Assurance vie","CTO","PER","Livret A","LDDS","LEP","Compte courant","Crypto","Immobilier","Autre"];
@@ -267,7 +292,7 @@ const HKEY="tracker.hist.v1",XKEY="tracker.lastExport";
 let hist=[];
 const fd=d=>d.split("-").reverse().join("/");
 function loadH(){try{const d=JSON.parse(localStorage.getItem(HKEY));hist=Array.isArray(d)?d:[]}catch(e){hist=[]}}
-function saveH(){try{localStorage.setItem(HKEY,JSON.stringify(hist))}catch(e){}}
+function saveH(){persist()}
 function sv(t,a){const e=document.createElementNS("http://www.w3.org/2000/svg",t);for(const k in a)e.setAttribute(k,a[k]);return e}
 const eur0=n=>new Intl.NumberFormat("fr-FR",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(n);
 function niceTicks(lo,hi,n=4){
@@ -312,6 +337,63 @@ function backupStatus(){
   $("#backupWarn").textContent=old?(days===null?"Vous n'avez jamais exporté vos données. Faites une sauvegarde plus bas.":`Dernier export il y a ${days} jours. Pensez à sauvegarder vos données.`):"";
   $("#backupNote").textContent=days===null?"Jamais exporté.":`Dernier export : ${days===0?"aujourd'hui":"il y a "+days+" jour(s)"}.`;
 }
+const DBN="patrimoine",STORE="kv";
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function idbGet(k){const d=await idb();return new Promise((res,rej)=>{const q=d.transaction(STORE).objectStore(STORE).get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
+async function idbSet(k,v){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction(STORE,"readwrite");t.objectStore(STORE).put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
+async function idbDel(k){const d=await idb();return new Promise((res,rej)=>{const t=d.transaction(STORE,"readwrite");t.objectStore(STORE).delete(k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
+async function kvGet(k){try{const v=await idbGet(k);if(v!==undefined)return v}catch(e){}try{return JSON.parse(localStorage.getItem("tracker.rec"))}catch(e){return null}}
+async function kvSet(k,v){try{await idbSet(k,v);return}catch(e){}try{localStorage.setItem("tracker.rec",JSON.stringify(v))}catch(e){}}
+async function kvDel(k){try{await idbDel(k)}catch(e){}try{localStorage.removeItem("tracker.rec")}catch(e){}}
+
+function b64(u){const a=new Uint8Array(u);let t="";for(let i=0;i<a.length;i+=8192)t+=String.fromCharCode.apply(null,a.subarray(i,i+8192));return btoa(t)}
+const unb64=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
+async function derive(pw,salt){const m=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:250000,hash:"SHA-256"},m,{name:"AES-GCM",length:256},false,["encrypt","decrypt"])}
+async function enc(key,text){const iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(text));return{iv:b64(iv),data:b64(ct)}}
+async function dec(key,iv,data){return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(iv)},key,unb64(data)))}
+
+let cryptoKey=null,salt=null,pend=Promise.resolve();
+function persist(){
+  pend=pend.then(async()=>{
+    const json=JSON.stringify({items,hist});
+    await kvSet("data",cryptoKey?{v:1,enc:true,salt:b64(salt),...await enc(cryptoKey,json)}:{v:1,enc:false,json});
+  }).catch(()=>{});
+  return pend;
+}
+function protStatus(){$("#pwState").textContent=cryptoKey?"🔒 Vos données sont chiffrées (AES-GCM) dans ce navigateur.":"🔓 Vos données sont stockées sans mot de passe dans ce navigateur."}
+function start(){$("#lock").hidden=true;$("main").hidden=false;protStatus();render();renderChart();loadPrices()}
+async function init(){
+  let rec=null;try{rec=await kvGet("data")}catch(e){}
+  if(rec&&rec.enc){$("main").hidden=true;$("#lock").hidden=false;$("#lpw").focus();return}
+  if(rec){try{const d=JSON.parse(rec.json);items=d.items||[];hist=d.hist||[]}catch(e){}}
+  else{
+    let had=false;try{had=!!(localStorage.getItem(KEY)||localStorage.getItem(HKEY))}catch(e){}
+    if(had){load();loadH();persist().then(()=>{try{localStorage.removeItem(KEY);localStorage.removeItem(HKEY)}catch(e){}})}
+  }
+  start();
+}
+async function unlock(){
+  const rec=await kvGet("data");
+  try{const sl=unb64(rec.salt),k=await derive($("#lpw").value,sl),d=JSON.parse(await dec(k,rec.iv,rec.data));
+    salt=sl;cryptoKey=k;items=d.items||[];hist=d.hist||[];$("#lpw").value="";$("#lmsg").textContent="";start();
+  }catch(e){$("#lmsg").textContent="Mot de passe incorrect."}
+}
+async function setPw(){
+  const a=$("#pw1").value,b=$("#pw2").value,m=$("#pwMsg");
+  if(!window.crypto||!crypto.subtle){m.textContent="Le chiffrement exige une page en https.";return}
+  if(a.length<8){m.textContent="Choisissez au moins 8 caractères.";return}
+  if(a!==b){m.textContent="Les deux mots de passe sont différents.";return}
+  salt=crypto.getRandomValues(new Uint8Array(16));cryptoKey=await derive(a,salt);
+  $("#pw1").value="";$("#pw2").value="";await persist();protStatus();
+  m.textContent="Données chiffrées. Retenez ce mot de passe : il est impossible de le récupérer.";
+}
+async function exportEnc(){
+  const pw=$("#encPwd").value,msg=$("#bkMsg");
+  if(!window.crypto||!crypto.subtle){msg.textContent="Le chiffrement exige une page en https.";return}
+  if(pw.length<8){msg.textContent="Saisissez un mot de passe de 8 caractères minimum pour le fichier.";return}
+  const sl=crypto.getRandomValues(new Uint8Array(16)),k=await derive(pw,sl),e=await enc(k,JSON.stringify({version:2,items,history:hist}));
+  deliver(JSON.stringify({format:"patrimoine-enc",v:1,salt:b64(sl),...e}),"patrimoine.enc","application/octet-stream");
+}
 const fEnv=$("#fEnv");
 [["","Enveloppe…"],...ENVS.map(e=>[e,e])].forEach(([v,t])=>fEnv.append(el("option",{value:v},t)));
 $("#vLine").addEventListener("click",()=>{view="line";render()});
@@ -319,7 +401,16 @@ $("#vEnv").addEventListener("click",()=>{view="env";render()});
 $("#addBtn").addEventListener("click",addLine);
 document.querySelectorAll("#add input").forEach(i=>i.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();addLine()}}));
 
-function importText(t){
+async function importText(t){
+  let o=null;try{o=JSON.parse(t)}catch(e){}
+  if(o&&o.format==="patrimoine-enc"){
+    const pw=$("#encPwd").value,msg=$("#bkMsg");
+    if(!pw){msg.textContent="Fichier chiffré : saisissez son mot de passe dans le champ « Mot de passe du fichier chiffré ».";return}
+    try{t=await dec(await derive(pw,unb64(o.salt)),o.iv,o.data)}catch(e){msg.textContent="Mot de passe incorrect ou fichier abîmé.";return}
+  }
+  importPlain(t);
+}
+function importPlain(t){
   const msg=$("#bkMsg");
   try{const d0=JSON.parse(t),d=Array.isArray(d0)?d0:d0.items;
     if(!Array.isArray(d))throw 0;
@@ -328,17 +419,17 @@ function importText(t){
     save();loadPrices();render();msg.textContent="Données importées.";
   }catch(err){msg.textContent="Données non reconnues. Utilisez un export de cet outil."}
 }
-$("#export").addEventListener("click",()=>{
-  const txt=JSON.stringify({version:2,items,history:hist},null,2),box=$("#bkBox"),msg=$("#bkMsg");
-  try{const a=el("a",{href:URL.createObjectURL(new Blob([txt],{type:"application/json"})),download:"patrimoine.json"});document.body.append(a);a.click();a.remove()}catch(e){}
-  box.hidden=false;box.value=txt;box.focus();box.select();
-  let copied=false;try{copied=document.execCommand("copy")}catch(e){}
-  msg.textContent=copied
-    ?"Données copiées. Collez-les dans une note ou un fichier patrimoine.json (un fichier a aussi pu être téléchargé)."
-    :"Si aucun fichier n'est téléchargé, copiez le texte ci-dessus et gardez-le dans une note ou un fichier patrimoine.json.";
+function deliver(txt,name,type){
+  const box=$("#bkBox"),msg=$("#bkMsg");
+  try{const a=el("a",{href:URL.createObjectURL(new Blob([txt],{type})),download:name});document.body.append(a);a.click();a.remove()}catch(e){}
+  box.hidden=false;box.dataset.mode="";box.value=txt;box.focus();box.select();
+  let ok=false;try{ok=document.execCommand("copy")}catch(e){}
+  msg.textContent=ok?`Données copiées. Collez-les dans une note ou un fichier ${name} (un fichier a aussi pu être téléchargé).`:`Si aucun fichier n'est téléchargé, copiez le texte ci-dessus et gardez-le dans une note ou un fichier ${name}.`;
   try{localStorage.setItem(XKEY,String(Date.now()))}catch(e){}
   backupStatus();
-});
+}
+$("#export").addEventListener("click",()=>deliver(JSON.stringify({version:2,items,history:hist},null,2),"patrimoine.json","application/json"));
+$("#exportEnc").addEventListener("click",exportEnc);
 $("#importBtn").addEventListener("click",()=>$("#importFile").click());
 $("#importFile").addEventListener("change",e=>{
   const file=e.target.files[0];if(!file)return;
@@ -367,7 +458,14 @@ $("#theme").addEventListener("click",()=>{
 });
 const ff=$("#fFilter");[["","Toutes les enveloppes"],...ENVS.map(e=>[e,e])].forEach(([v,t])=>ff.append(el("option",{value:v},t)));
 $("#q").addEventListener("input",render);ff.addEventListener("change",render);
-load();loadH();render();renderChart();loadPrices();
+$("#pwBtn").addEventListener("click",setPw);
+$("#lgo").addEventListener("click",unlock);
+$("#lpw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock()});
+$("#lreset").addEventListener("click",async e=>{
+  if(!e.target.dataset.sure){e.target.dataset.sure="1";e.target.textContent="Cliquez à nouveau pour tout effacer définitivement";return}
+  await kvDel("data");items=[];hist=[];cryptoKey=null;salt=null;e.target.dataset.sure="";start();
+});
+init();
 </script>
 </body>
 </html>
