@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action https:; base-uri 'none'">
 <title>Suivi de patrimoine, sans connexion à vos comptes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E">
 <style>
 :root{--bg:#EEF1F5;--card:#fff;--ink:#17202A;--mute:#5B6673;--line:#D5DBE3;--accent:#2447D1;--pos:#1E7F5C;--neg:#B3372F;--c1:#2447D1;--c2:#0E9AA7;--c3:#D79A00;--c4:#8E44AD;--c5:#D1495B;--c6:#6B7785;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root{--bg:#10151C;--card:#18202A;--ink:#E8ECF1;--mute:#98A3B0;--line:#2B3644;--accent:#7C97FF;--pos:#4CC38F;--neg:#F0776E}}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#10151C;--card:#18202A;--ink:#E8ECF1;--mute:#98A3B0;--line:#2B3644;--accent:#7C97FF;--pos:#4CC38F;--neg:#F0776E}}
+:root[data-theme=dark]{--bg:#10151C;--card:#18202A;--ink:#E8ECF1;--mute:#98A3B0;--line:#2B3644;--accent:#7C97FF;--pos:#4CC38F;--neg:#F0776E}
 *{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -34,8 +36,8 @@ input,button{font:inherit;color:inherit}
 input{background:transparent;border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-width:0}
 td input{width:90px;text-align:right;padding:4px 6px}
 button{cursor:pointer;border:1px solid var(--line);background:transparent;border-radius:6px;padding:8px 12px}
-button.main{background:var(--accent);border-color:var(--accent);color:#fff}
-@media (prefers-color-scheme:dark){button.main{color:#10151C}}
+button.main{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+
 button.x{border:0;color:var(--mute);padding:4px 8px}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .add{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
@@ -51,6 +53,8 @@ tr.grp td.mute{font-weight:400;color:var(--mute)}
 .envs .p{color:var(--mute);font-size:.82rem}
 .tabs{margin:18px 0 0;gap:6px}
 .tabs button{padding:6px 12px;font-size:.9rem}
+.hide #total,.hide #delta,.hide #income,.hide .envs .v,.hide #list td:not(:first-child),.hide #chart{filter:blur(9px);user-select:none}
+input[type=search]{flex:1 1 180px}
 .empty{color:var(--mute);padding:8px 0}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .note{color:var(--mute);font-size:.85rem;margin:10px 0 0}
@@ -60,12 +64,17 @@ tr.grp td.mute{font-weight:400;color:var(--mute)}
 </head>
 <body>
 <main>
+  <div class="row" style="justify-content:flex-end;margin-bottom:8px">
+    <button id="eye" type="button" aria-pressed="false">👁 Masquer</button>
+    <button id="theme" type="button" aria-label="Basculer clair / sombre">◐ Thème</button>
+  </div>
   <h1>Suivi de patrimoine</h1>
   <p class="sub">Aucune connexion à vos comptes. Vous saisissez vos lignes, les données restent dans ce navigateur.</p>
 
   <p class="note neg" id="backupWarn" role="status" style="margin:-8px 0 14px"></p>
   <div class="total num" id="total">0,00 €</div>
   <div class="delta num" id="delta"></div>
+  <div class="delta num" id="income" style="color:var(--mute)"></div>
   <ul class="envs num" id="envs" aria-label="Total par enveloppe"></ul>
   <div class="row tabs" role="group" aria-label="Affichage de la répartition">
     <button type="button" id="vLine">Par ligne</button>
@@ -76,6 +85,10 @@ tr.grp td.mute{font-weight:400;color:var(--mute)}
 
   <section>
     <h2>Mes lignes</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="q" type="search" placeholder="Rechercher une ligne…" aria-label="Rechercher une ligne">
+      <select id="fFilter" aria-label="Filtrer par enveloppe"></select>
+    </div>
     <div class="scroll" id="list"></div>
     <p class="note" id="status"></p>
   </section>
@@ -90,7 +103,7 @@ tr.grp td.mute{font-weight:400;color:var(--mute)}
       <input id="fPru" type="number" inputmode="decimal" step="any" min="0" placeholder="Prix de revient (€)" aria-label="Prix de revient">
       <input id="fPrice" type="number" inputmode="decimal" step="any" min="0" placeholder="Cours actuel (€)" aria-label="Cours actuel">
       <button class="main" type="button" id="addBtn">Ajouter la ligne</button>
-      <p class="note" id="hint">Pour un livret ou un compte : indiquez le solde en quantité, le reste se remplit tout seul.</p>
+      <p class="note" id="hint">Livret ou compte : indiquez le solde en quantité. Si la ligne existe déjà (même code, même enveloppe), la quantité s'ajoute et le prix de revient est moyenné.</p>
       <p class="note neg" id="addMsg" role="alert"></p>
     </div>
   </section>
@@ -160,8 +173,10 @@ function render(){
   const rows=items.map((i,idx)=>({...i,idx,env:envOf(i),value:i.qty*(i.price||0),cost:i.qty*i.pru}));
   const total=rows.reduce((s,r)=>s+r.value,0),cost=rows.reduce((s,r)=>s+r.cost,0);
   $("#total").textContent=eur(total);
+  const inc=rows.reduce((s,r)=>s+r.value*(r.yield||0)/100,0);
+  $("#income").textContent=inc>0?`Revenu annuel estimé : ${eur(inc)} (≈ ${eur(inc/12)} par mois)`:"";
   const d=$("#delta");
-  if(rows.length&&cost>0){const g=total-cost;d.className="delta num "+sign(g);d.textContent=(g>=0?"+":"")+eur(g)+" ("+pct(g/cost*100)+") par rapport au prix de revient"}
+  if(rows.length&&cost>0){const g=total-cost;d.className="delta num "+sign(g);d.textContent=`Capital investi ${eur(cost)} · Plus-value ${g>=0?"+":""}${eur(g)} (${pct(g/cost*100)})`}
   else{d.className="delta";d.textContent=""}
 
   const groups={};rows.forEach(r=>{(groups[r.env]=groups[r.env]||[]).push(r)});
@@ -182,18 +197,24 @@ function render(){
     bar.append(el("span",{style:`width:${w}%;background:${color(idx)}`,title:`${p.name} : ${w.toFixed(1)} %`}));
     leg.append(el("li",{},el("i",{style:`background:${color(idx)}`}),`${p.name} ${w.toFixed(1).replace(".",",")} %`))}});
 
+  const q=$("#q").value.trim().toLowerCase(),fe=$("#fFilter").value;
+  const vis=rows.filter(r=>(!fe||r.env===fe)&&(!q||(r.name+" "+(r.ticker||"")).toLowerCase().includes(q)));
+  const vg={};vis.forEach(r=>{(vg[r.env]=vg[r.env]||[]).push(r)});
+  const vorder=order.filter(e=>vg[e]);
   const list=$("#list");list.replaceChildren();
-  if(!rows.length){list.append(el("p",{class:"empty"},"Aucune ligne pour l'instant. Ajoutez votre première ligne ci-dessous."));}
+  if(!rows.length||!vis.length){list.append(el("p",{class:"empty"},rows.length?"Aucune ligne ne correspond à la recherche.":"Aucune ligne pour l'instant. Ajoutez votre première ligne ci-dessous."));}
   else{
-    const head=el("tr",{},...["Ligne","Quantité","Prix de revient","Cours","Valeur","Écart","Cible %","Part de l'enveloppe",""].map(h=>el("th",{},h)));
+    const head=el("tr",{},...["Ligne","Quantité","Prix de revient","Cours","Valeur","Écart","Cible %","Part de l'enveloppe","Rend. %",""].map(h=>el("th",{},h)));
     const body=[];
-    order.forEach(e=>{
+    vorder.forEach(e=>{
       const sub=groups[e].reduce((s,r)=>s+r.value,0);
-      body.push(el("tr",{class:"grp num"},el("td",{colspan:"4"},e),el("td",{},eur(sub)),el("td",{colspan:"4",class:"mute"},share(sub,total)+" du total")));
-      groups[e].forEach(r=>{
+      body.push(el("tr",{class:"grp num"},el("td",{colspan:"4"},e),el("td",{},eur(sub)),el("td",{colspan:"5",class:"mute"},share(sub,total)+" du total")));
+      vg[e].forEach(r=>{
         const g=r.cost>0?(r.value-r.cost)/r.cost*100:0;
         const price=el("input",{type:"number",step:"any",min:"0",value:r.price||"","aria-label":"Cours de "+r.name,onchange:ev=>{items[r.idx].price=parseFloat(ev.target.value)||0;save();render()}});
         const tgt=el("input",{type:"number",step:"any",min:"0",max:"100",value:r.target||"","aria-label":"Cible de "+r.name,onchange:ev=>{items[r.idx].target=parseFloat(ev.target.value)||0;save();render()}});
+        const yin=el("input",{type:"number",step:"any",min:"0",value:r.yield||"","aria-label":"Rendement de "+r.name,onchange:ev=>{items[r.idx].yield=parseFloat(ev.target.value)||0;save();render()}});
+        const yoc=r.yield>0&&r.cost>0?"YoC "+new Intl.NumberFormat("fr-FR",{maximumFractionDigits:1}).format(r.value*r.yield/r.cost)+" %":"";
         let gap="";
         if(r.target>0){const df=r.target/100*sub-r.value;gap=Math.abs(df)<1?"sur la cible":(df>0?"à ajouter ≈ ":"au-dessus de ≈ ")+eur(Math.abs(df))}
         const sel=envSelect(r.env,ev=>{items[r.idx].env=ev.target.value;save();render()});
@@ -202,7 +223,7 @@ function render(){
           el("td",{},String(r.qty)),el("td",{},eur(r.pru)),
           el("td",{},price),el("td",{},eur(r.value)),
           el("td",{class:sign(g)},r.price&&r.cost>0?pct(g):"–"),
-          el("td",{},tgt),el("td",{},share(r.value,sub),el("small",{},gap)),
+          el("td",{},tgt),el("td",{},share(r.value,sub),el("small",{},gap)),el("td",{},yin,el("small",{},yoc)),
           el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer "+r.name,onclick:()=>{items.splice(r.idx,1);save();render()}},"✕"))));
       });
     });
@@ -234,7 +255,10 @@ function addLine(){
   if(livret){if(!(pru>=0))pru=1;if(!(price>=0))price=1}
   if(!(pru>=0)){msg.textContent="Indiquez votre prix de revient par unité (0 si inconnu).";return}
   msg.textContent="";
-  items.push({name,env,ticker:$("#fTicker").value.trim().toUpperCase(),qty,pru,price:price>=0?price:0});
+  const ticker=$("#fTicker").value.trim().toUpperCase();
+  const ex=items.find(i=>envOf(i)===env&&(ticker?i.ticker===ticker:i.name.toLowerCase()===name.toLowerCase()));
+  if(ex){const nq=ex.qty+qty;ex.pru=(ex.qty*ex.pru+qty*pru)/nq;ex.qty=nq;if(price>0)ex.price=price;msg.textContent="Ajouté à la ligne existante, prix de revient moyen recalculé."}
+  else items.push({name,env,ticker,qty,pru,price:price>=0?price:0});
   save();
   ["#fName","#fTicker","#fQty","#fPru","#fPrice"].forEach(i=>$(i).value="");
   render();loadPrices();
@@ -300,7 +324,7 @@ function importText(t){
   try{const d0=JSON.parse(t),d=Array.isArray(d0)?d0:d0.items;
     if(!Array.isArray(d))throw 0;
     if(Array.isArray(d0.history)){hist=d0.history.filter(h=>h&&/^\d{4}-\d{2}-\d{2}$/.test(h.d)&&isFinite(h.total)).map(h=>({d:h.d,total:+h.total}));saveH();renderChart()}
-    items=d.filter(i=>i&&typeof i.name==="string").map(i=>({name:String(i.name).slice(0,60),env:ENVS.includes(i.env)?i.env:"",target:+i.target||0,ticker:String(i.ticker||"").slice(0,20),qty:+i.qty||0,pru:+i.pru||0,price:+i.price||0}));
+    items=d.filter(i=>i&&typeof i.name==="string").map(i=>({name:String(i.name).slice(0,60),env:ENVS.includes(i.env)?i.env:"",target:+i.target||0,yield:+i.yield||0,ticker:String(i.ticker||"").slice(0,20),qty:+i.qty||0,pru:+i.pru||0,price:+i.price||0}));
     save();loadPrices();render();msg.textContent="Données importées.";
   }catch(err){msg.textContent="Données non reconnues. Utilisez un export de cet outil."}
 }
@@ -335,6 +359,14 @@ nl.addEventListener("submit",e=>{
   $("#nlMsg").textContent="Merci ! Terminez l'inscription dans l'onglet qui vient de s'ouvrir.";
 });
 
+$("#eye").addEventListener("click",()=>{const h=document.body.classList.toggle("hide");$("#eye").textContent=h?"🙈 Afficher":"👁 Masquer";$("#eye").setAttribute("aria-pressed",h)});
+try{const t=localStorage.getItem("tracker.theme");if(t)document.documentElement.dataset.theme=t}catch(e){}
+$("#theme").addEventListener("click",()=>{
+  const cur=document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"),nx=cur==="dark"?"light":"dark";
+  document.documentElement.dataset.theme=nx;try{localStorage.setItem("tracker.theme",nx)}catch(e){}
+});
+const ff=$("#fFilter");[["","Toutes les enveloppes"],...ENVS.map(e=>[e,e])].forEach(([v,t])=>ff.append(el("option",{value:v},t)));
+$("#q").addEventListener("input",render);ff.addEventListener("change",render);
 load();loadH();render();renderChart();loadPrices();
 </script>
 </body>
