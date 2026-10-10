@@ -84,7 +84,7 @@ Ce projet est distribué sous licence [PolyForm Noncommercial 1.0.0](LICENSE).
 - **Autorisé :** utiliser l'outil pour gérer votre propre patrimoine, l'étudier, le modifier et le partager à des fins non commerciales.
 - **Non autorisé sans accord de l'auteur :** le revendre, l'intégrer à un produit ou un service payant, ou en tirer un revenu.
 
-Pour un usage commercial, contactez l'auteur.
+Pour un usage commercial, contactez l'auteur via le profil Githu.
 
 ## Avertissement
 
