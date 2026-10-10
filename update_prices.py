@@ -2,6 +2,7 @@
 """Met à jour prices.json à partir de tickers.json.
 Source : API non officielle de Yahoo Finance (peut changer ou se bloquer sans préavis)."""
 import json
+import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ URL = "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d
 
 
 def fetch(symbol):
+    time.sleep(0.5)
     req = urllib.request.Request(URL.format(symbol), headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=20) as r:
         meta = json.load(r)["chart"]["result"][0]["meta"]
@@ -20,7 +22,7 @@ def fetch(symbol):
         raise ValueError("cours absent")
     if meta.get("currency") not in ("EUR", None):
         raise ValueError(f"devise {meta.get('currency')} (EUR attendu)")
-    return round(float(price), 4)
+    return round(float(price), 4), meta.get("longName") or meta.get("shortName") or ""
 
 
 def main():
@@ -34,9 +36,9 @@ def main():
     ok = 0
     for code, symbol in tickers.items():
         try:
-            prices[code] = fetch(symbol)
+            prices[code], name = fetch(symbol)
             ok += 1
-            print(f"OK {code} ({symbol}) : {prices[code]}")
+            print(f"OK {code} ({symbol}) : {prices[code]} EUR - {name}")
         except Exception as e:
             print(f"KO {code} ({symbol}) : {e}")
     if ok == 0:

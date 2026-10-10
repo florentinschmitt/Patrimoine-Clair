@@ -1,4 +1,27 @@
 {
+  "WPEA": "WPEA.PA",
+  "PNAS": "PNAS.PA",
+  "PAASI": "PAASI.PA",
+  "PAEJ": "PAEJ.PA",
+  "EUDV": "EUDV.PA",
+  "CW8": "CW8.PA",
+  "ESE": "ESE.PA",
   "TTE": "TTE.PA",
-  "WPEA": "WPEA.PA"
+  "MC": "MC.PA",
+  "OR": "OR.PA",
+  "RMS": "RMS.PA",
+  "AIR": "AIR.PA",
+  "SAN": "SAN.PA",
+  "AI": "AI.PA",
+  "BNP": "BNP.PA",
+  "SU": "SU.PA",
+  "CS": "CS.PA",
+  "SAF": "SAF.PA",
+  "DG": "DG.PA",
+  "ORA": "ORA.PA",
+  "GLE": "GLE.PA",
+  "ACA": "ACA.PA",
+  "EL": "EL.PA",
+  "BN": "BN.PA",
+  "ENGI": "ENGI.PA"
 }
