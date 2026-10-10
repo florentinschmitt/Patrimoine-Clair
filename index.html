@@ -68,6 +68,15 @@ input[type=search]{flex:1 1 180px}
 </style>
 </head>
 <body>
+<div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTxt" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:18px;max-width:340px;width:100%">
+    <p id="dlgTxt" style="margin:0 0 14px"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button id="dlgNo" type="button">Annuler</button>
+      <button id="dlgYes" type="button" class="main" style="background:var(--neg);border-color:var(--neg)">Supprimer</button>
+    </div>
+  </div>
+</div>
 <div id="lock" hidden style="max-width:420px;margin:12vh auto;padding:0 16px">
   <section>
     <h2>Données protégées</h2>
@@ -269,7 +278,7 @@ function render(){
           el("td",{},price),el("td",{},eur(r.value)),
           el("td",{class:sign(g)},r.price&&r.cost>0?pct(g):"–"),
           el("td",{},tgt),el("td",{},share(r.value,sub),el("small",{},gap)),el("td",{},yin,el("small",{},yoc)),
-          el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer "+r.name,onclick:()=>{items.splice(r.idx,1);save();render()}},"✕"))));
+          el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer "+r.name,onclick:async()=>{if(await askDel(`Supprimer la ligne « ${r.name} » ?`)){items.splice(r.idx,1);save();render()}}},"✕"))));
       });
     });
     list.append(el("table",{},el("thead",{},head),el("tbody",{},body)));
@@ -489,12 +498,23 @@ $("#lreset").addEventListener("click",async e=>{
   if(!e.target.dataset.sure){e.target.dataset.sure="1";e.target.textContent="Cliquez à nouveau pour tout effacer définitivement";return}
   await kvDel("data");items=[];hist=[];cryptoKey=null;salt=null;e.target.dataset.sure="";start();
 });
+function askDel(txt){
+  return new Promise(res=>{
+    const d=$("#dlg"),yes=$("#dlgYes"),no=$("#dlgNo");
+    $("#dlgTxt").textContent=txt;d.style.display="flex";no.focus();
+    const key=e=>{if(e.key==="Escape")end(false)};
+    const end=v=>{d.style.display="none";yes.onclick=no.onclick=d.onclick=null;document.removeEventListener("keydown",key);res(v)};
+    document.addEventListener("keydown",key);
+    yes.onclick=()=>end(true);no.onclick=()=>end(false);
+    d.onclick=e=>{if(e.target===d)end(false)};
+  });
+}
 function renderDeps(){
   const sum=deposits.reduce((a,x)=>a+x.amt,0),box=$("#depList");
   $("#depSum").textContent=deposits.length?`Capital versé : ${eur(sum)} sur ${deposits.length} opération(s).`:"Saisissez vos versements pour distinguer le capital versé de la plus-value.";
   box.replaceChildren();if(!deposits.length)return;
   const rows=deposits.map((x,i)=>({...x,i})).sort((a,b)=>a.d<b.d?1:-1).slice(0,12);
-  box.append(el("table",{},el("tbody",{},rows.map(r=>el("tr",{class:"num"},el("td",{},fd(r.d)),el("td",{},r.env||"Toutes enveloppes"),el("td",{class:r.amt<0?"neg":""},eur(r.amt)),el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer ce versement",onclick:()=>{deposits.splice(r.i,1);persist();render();renderChart()}},"✕")))))));
+  box.append(el("table",{},el("tbody",{},rows.map(r=>el("tr",{class:"num"},el("td",{},fd(r.d)),el("td",{},r.env||"Toutes enveloppes"),el("td",{class:r.amt<0?"neg":""},eur(r.amt)),el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer ce versement",onclick:async()=>{if(await askDel(`Supprimer le versement du ${fd(r.d)} (${eur(r.amt)}) ?`)){deposits.splice(r.i,1);persist();render();renderChart()}}},"✕")))))));
 }
 function addDep(){
   const d=$("#dDate").value,a=parseFloat(String($("#dAmt").value).replace(",",".")),m=$("#dMsg");
