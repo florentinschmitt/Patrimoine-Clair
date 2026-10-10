@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action https:; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action https:; base-uri 'none'">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#2447D1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Patrimoine">
 <title>Suivi de patrimoine, sans connexion à vos comptes</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E">
 <style>
@@ -53,7 +58,7 @@ tr.grp td.mute{font-weight:400;color:var(--mute)}
 .envs .p{color:var(--mute);font-size:.82rem}
 .tabs{margin:18px 0 0;gap:6px}
 .tabs button{padding:6px 12px;font-size:.9rem}
-.hide #total,.hide #delta,.hide #income,.hide .envs .v,.hide #list td:not(:first-child),.hide #chart{filter:blur(9px);user-select:none}
+.hide #total,.hide #delta,.hide #income,.hide .envs .v,.hide #list td:not(:first-child),.hide #chart,.hide #depList,.hide #depSum{filter:blur(9px);user-select:none}
 input[type=search]{flex:1 1 180px}
 .empty{color:var(--mute);padding:8px 0}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -121,6 +126,19 @@ input[type=search]{flex:1 1 180px}
   </section>
 
   <section>
+    <h2>Versements</h2>
+    <p class="note" id="depSum" style="margin:0 0 10px"></p>
+    <div class="add">
+      <input id="dDate" type="date" aria-label="Date du versement">
+      <input id="dAmt" type="number" step="any" inputmode="decimal" placeholder="Montant (€, négatif = retrait)" aria-label="Montant">
+      <select id="dEnv" aria-label="Enveloppe"></select>
+      <button class="main" id="dBtn" type="button">Ajouter le versement</button>
+      <p class="note neg" id="dMsg" role="alert"></p>
+    </div>
+    <div class="scroll" id="depList" style="margin-top:8px"></div>
+  </section>
+
+  <section>
     <h2>Évolution</h2>
     <div class="row"><button id="snapBtn" type="button">Enregistrer un instantané</button></div>
     <div id="chart"></div>
@@ -163,6 +181,7 @@ input[type=search]{flex:1 1 180px}
     </form>
     <p class="note" id="nlMsg" role="status"></p>
   </section>
+  <p class="note">Installer sur téléphone : Safari → Partager → Sur l'écran d'accueil. Chrome → menu ⋮ → Installer l'application. L'appli installée peut avoir son propre stockage : transférez vos données par export / import.</p>
 </main>
 
 <script>
@@ -201,7 +220,8 @@ function render(){
   const inc=rows.reduce((s,r)=>s+r.value*(r.yield||0)/100,0);
   $("#income").textContent=inc>0?`Revenu annuel estimé : ${eur(inc)} (≈ ${eur(inc/12)} par mois)`:"";
   const d=$("#delta");
-  if(rows.length&&cost>0){const g=total-cost;d.className="delta num "+sign(g);d.textContent=`Capital investi ${eur(cost)} · Plus-value ${g>=0?"+":""}${eur(g)} (${pct(g/cost*100)})`}
+  const dep=deposits.reduce((s,x)=>s+x.amt,0),base=dep>0?dep:cost;
+  if(rows.length&&base>0){const g=total-base;d.className="delta num "+sign(g);d.textContent=`${dep>0?"Capital versé":"Capital investi"} ${eur(base)} · Plus-value ${g>=0?"+":""}${eur(g)} (${pct(g/base*100)})`}
   else{d.className="delta";d.textContent=""}
 
   const groups={};rows.forEach(r=>{(groups[r.env]=groups[r.env]||[]).push(r)});
@@ -257,6 +277,7 @@ function render(){
   $("#status").textContent=autoCount>0
     ?`Cours mis à jour automatiquement${pricesDate?" le "+pricesDate:""} pour ${autoCount} ligne(s). Les autres se saisissent à la main.`
     :"Cours saisis à la main. Modifiez un cours directement dans le tableau.";
+  renderDeps();
   backupStatus();
 }
 
@@ -289,7 +310,7 @@ function addLine(){
   render();loadPrices();
 }
 const HKEY="tracker.hist.v1",XKEY="tracker.lastExport";
-let hist=[];
+let hist=[],deposits=[];
 const fd=d=>d.split("-").reverse().join("/");
 function loadH(){try{const d=JSON.parse(localStorage.getItem(HKEY));hist=Array.isArray(d)?d:[]}catch(e){hist=[]}}
 function saveH(){persist()}
@@ -307,7 +328,8 @@ function renderChart(){
   if(!hist.length){n.textContent="Enregistrez un instantané chaque mois pour tracer l'évolution de votre patrimoine.";return}
   const W=480,H=270,L=70,R=16,T=26,B=44,PW=W-L-R;
   const t0=Date.parse(hist[0].d),t1=Date.parse(hist[hist.length-1].d),multi=t1>t0;
-  const ticks=niceTicks(Math.min(...hist.map(h=>h.total)),Math.max(...hist.map(h=>h.total))),lo=ticks[0],hi=ticks[ticks.length-1];
+  const cum=h=>deposits.filter(x=>x.d<=h.d).reduce((a,x)=>a+x.amt,0),vals=[...hist.map(h=>h.total),...(deposits.length?hist.map(cum):[])];
+  const ticks=niceTicks(Math.min(...vals),Math.max(...vals)),lo=ticks[0],hi=ticks[ticks.length-1];
   const X=h=>multi?L+(Date.parse(h.d)-t0)/(t1-t0)*PW:L+PW/2,Y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
   const svg=sv("svg",{viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"Montant du patrimoine en fonction du temps",style:"width:100%;height:auto;margin-top:12px"});
   const tx=(x,y,txt,a)=>{const e=sv("text",{x,y,"text-anchor":a,"font-size":"12",fill:"var(--mute)"});e.textContent=txt;svg.append(e)};
@@ -319,11 +341,12 @@ function renderChart(){
     tx(x,H-B+18,fd(new Date(t).toISOString().slice(0,10)),k===0?"middle":i===0?"start":i===k?"end":"middle");
   }
   tx(4,14,"Montant (€)","start");tx(L+PW/2,H-6,"Date","middle");
+  if(deposits.length)svg.append(sv("polyline",{points:hist.map(h=>X(h)+","+Y(cum(h))).join(" "),fill:"none",stroke:"var(--mute)","stroke-width":"2","stroke-dasharray":"5 4"}));
   svg.append(sv("polyline",{points:hist.map(h=>X(h)+","+Y(h.total)).join(" "),fill:"none",stroke:"var(--accent)","stroke-width":"2.5","stroke-linejoin":"round"}));
   hist.forEach(h=>{const c=sv("circle",{cx:X(h),cy:Y(h.total),r:"4",fill:"var(--accent)"}),t=sv("title",{});t.textContent=fd(h.d)+" : "+eur(h.total);c.append(t);svg.append(c)});
   box.append(svg);
   if(hist.length<2)n.textContent="Un instantané enregistré. Ajoutez-en un autre plus tard pour voir la courbe évoluer.";
-  else{const df=hist[hist.length-1].total-hist[0].total;n.textContent=`Du ${fd(hist[0].d)} au ${fd(hist[hist.length-1].d)} : ${df>=0?"+":""}${eur(df)}. Cet écart inclut vos versements.`}
+  else{const df=hist[hist.length-1].total-hist[0].total;n.textContent=`Du ${fd(hist[0].d)} au ${fd(hist[hist.length-1].d)} : ${df>=0?"+":""}${eur(df)}. ${deposits.length?"Pointillés : capital versé.":"Cet écart inclut vos versements."}`}
 }
 $("#snapBtn").addEventListener("click",()=>{
   const d=new Date().toISOString().slice(0,10),t=items.reduce((s,i)=>s+i.qty*(i.price||0),0);
@@ -355,17 +378,17 @@ async function dec(key,iv,data){return new TextDecoder().decode(await crypto.sub
 let cryptoKey=null,salt=null,pend=Promise.resolve();
 function persist(){
   pend=pend.then(async()=>{
-    const json=JSON.stringify({items,hist});
+    const json=JSON.stringify({items,hist,deposits});
     await kvSet("data",cryptoKey?{v:1,enc:true,salt:b64(salt),...await enc(cryptoKey,json)}:{v:1,enc:false,json});
   }).catch(()=>{});
   return pend;
 }
 function protStatus(){$("#pwState").textContent=cryptoKey?"🔒 Vos données sont chiffrées (AES-GCM) dans ce navigateur.":"🔓 Vos données sont stockées sans mot de passe dans ce navigateur."}
-function start(){$("#lock").hidden=true;$("main").hidden=false;protStatus();render();renderChart();loadPrices()}
+function start(){$("#dDate").value=new Date().toISOString().slice(0,10);$("#lock").hidden=true;$("main").hidden=false;protStatus();render();renderChart();loadPrices()}
 async function init(){
   let rec=null;try{rec=await kvGet("data")}catch(e){}
   if(rec&&rec.enc){$("main").hidden=true;$("#lock").hidden=false;$("#lpw").focus();return}
-  if(rec){try{const d=JSON.parse(rec.json);items=d.items||[];hist=d.hist||[]}catch(e){}}
+  if(rec){try{const d=JSON.parse(rec.json);items=d.items||[];hist=d.hist||[];deposits=d.deposits||[]}catch(e){}}
   else{
     let had=false;try{had=!!(localStorage.getItem(KEY)||localStorage.getItem(HKEY))}catch(e){}
     if(had){load();loadH();persist().then(()=>{try{localStorage.removeItem(KEY);localStorage.removeItem(HKEY)}catch(e){}})}
@@ -375,7 +398,7 @@ async function init(){
 async function unlock(){
   const rec=await kvGet("data");
   try{const sl=unb64(rec.salt),k=await derive($("#lpw").value,sl),d=JSON.parse(await dec(k,rec.iv,rec.data));
-    salt=sl;cryptoKey=k;items=d.items||[];hist=d.hist||[];$("#lpw").value="";$("#lmsg").textContent="";start();
+    salt=sl;cryptoKey=k;items=d.items||[];hist=d.hist||[];deposits=d.deposits||[];$("#lpw").value="";$("#lmsg").textContent="";start();
   }catch(e){$("#lmsg").textContent="Mot de passe incorrect."}
 }
 async function setPw(){
@@ -391,7 +414,7 @@ async function exportEnc(){
   const pw=$("#encPwd").value,msg=$("#bkMsg");
   if(!window.crypto||!crypto.subtle){msg.textContent="Le chiffrement exige une page en https.";return}
   if(pw.length<8){msg.textContent="Saisissez un mot de passe de 8 caractères minimum pour le fichier.";return}
-  const sl=crypto.getRandomValues(new Uint8Array(16)),k=await derive(pw,sl),e=await enc(k,JSON.stringify({version:2,items,history:hist}));
+  const sl=crypto.getRandomValues(new Uint8Array(16)),k=await derive(pw,sl),e=await enc(k,JSON.stringify({version:3,items,history:hist,deposits}));
   deliver(JSON.stringify({format:"patrimoine-enc",v:1,salt:b64(sl),...e}),"patrimoine.enc","application/octet-stream");
 }
 const fEnv=$("#fEnv");
@@ -415,6 +438,7 @@ function importPlain(t){
   try{const d0=JSON.parse(t),d=Array.isArray(d0)?d0:d0.items;
     if(!Array.isArray(d))throw 0;
     if(Array.isArray(d0.history)){hist=d0.history.filter(h=>h&&/^\d{4}-\d{2}-\d{2}$/.test(h.d)&&isFinite(h.total)).map(h=>({d:h.d,total:+h.total}));saveH();renderChart()}
+    if(Array.isArray(d0.deposits)){deposits=d0.deposits.filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(x.d)&&isFinite(x.amt)).map(x=>({d:x.d,amt:+x.amt,env:ENVS.includes(x.env)?x.env:""}))}
     items=d.filter(i=>i&&typeof i.name==="string").map(i=>({name:String(i.name).slice(0,60),env:ENVS.includes(i.env)?i.env:"",target:+i.target||0,yield:+i.yield||0,ticker:String(i.ticker||"").slice(0,20),qty:+i.qty||0,pru:+i.pru||0,price:+i.price||0}));
     save();loadPrices();render();msg.textContent="Données importées.";
   }catch(err){msg.textContent="Données non reconnues. Utilisez un export de cet outil."}
@@ -428,7 +452,7 @@ function deliver(txt,name,type){
   try{localStorage.setItem(XKEY,String(Date.now()))}catch(e){}
   backupStatus();
 }
-$("#export").addEventListener("click",()=>deliver(JSON.stringify({version:2,items,history:hist},null,2),"patrimoine.json","application/json"));
+$("#export").addEventListener("click",()=>deliver(JSON.stringify({version:3,items,history:hist,deposits},null,2),"patrimoine.json","application/json"));
 $("#exportEnc").addEventListener("click",exportEnc);
 $("#importBtn").addEventListener("click",()=>$("#importFile").click());
 $("#importFile").addEventListener("change",e=>{
@@ -465,6 +489,22 @@ $("#lreset").addEventListener("click",async e=>{
   if(!e.target.dataset.sure){e.target.dataset.sure="1";e.target.textContent="Cliquez à nouveau pour tout effacer définitivement";return}
   await kvDel("data");items=[];hist=[];cryptoKey=null;salt=null;e.target.dataset.sure="";start();
 });
+function renderDeps(){
+  const sum=deposits.reduce((a,x)=>a+x.amt,0),box=$("#depList");
+  $("#depSum").textContent=deposits.length?`Capital versé : ${eur(sum)} sur ${deposits.length} opération(s).`:"Saisissez vos versements pour distinguer le capital versé de la plus-value.";
+  box.replaceChildren();if(!deposits.length)return;
+  const rows=deposits.map((x,i)=>({...x,i})).sort((a,b)=>a.d<b.d?1:-1).slice(0,12);
+  box.append(el("table",{},el("tbody",{},rows.map(r=>el("tr",{class:"num"},el("td",{},fd(r.d)),el("td",{},r.env||"Toutes enveloppes"),el("td",{class:r.amt<0?"neg":""},eur(r.amt)),el("td",{},el("button",{class:"x",type:"button","aria-label":"Supprimer ce versement",onclick:()=>{deposits.splice(r.i,1);persist();render();renderChart()}},"✕")))))));
+}
+function addDep(){
+  const d=$("#dDate").value,a=parseFloat(String($("#dAmt").value).replace(",",".")),m=$("#dMsg");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){m.textContent="Choisissez une date.";return}
+  if(!isFinite(a)||a===0){m.textContent="Indiquez un montant (négatif pour un retrait).";return}
+  m.textContent="";deposits.push({d,amt:a,env:$("#dEnv").value});$("#dAmt").value="";persist();render();renderChart();
+}
+[["","Toutes les enveloppes"],...ENVS.map(e=>[e,e])].forEach(([v,t])=>$("#dEnv").append(el("option",{value:v},t)));
+$("#dBtn").addEventListener("click",addDep);
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 init();
 </script>
 </body>
