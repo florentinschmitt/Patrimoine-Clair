@@ -2,6 +2,8 @@
 
 Suivez votre patrimoine en un coup d'œil, **sans connecter vos comptes bancaires** et sans créer de compte.
 
+**[Ouvrir l'outil](https://florentinschmitt.github.io/Patrimoine-Clair/)**
+
 ## Pourquoi cet outil
 
 - **Aucune connexion bancaire.** Vous saisissez vos lignes vous-même.
