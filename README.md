@@ -24,7 +24,6 @@ Suivez votre patrimoine en un coup d'œil, **sans connecter vos comptes bancaire
 - **Bouton œil** : floute les montants pour partager une capture d'écran
 - **Thème clair / sombre** manuel
 - **Installable sur téléphone** (PWA) et utilisable hors-ligne
-- **Cours automatiques** chaque soir de semaine (voir plus bas)
 
 ## Utilisation
 
